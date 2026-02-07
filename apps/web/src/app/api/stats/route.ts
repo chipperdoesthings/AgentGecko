@@ -3,6 +3,7 @@ import { getStats } from "@/lib/agent-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 30;
 
 /**
  * GET /api/stats

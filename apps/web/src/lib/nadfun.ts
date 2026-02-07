@@ -186,7 +186,7 @@ class RateLimiter {
   }
 }
 
-const limiter = new RateLimiter(5, 0.8); // 5 burst, 0.8/sec sustained (conservative for Nad.fun limits)
+const limiter = new RateLimiter(8, 2); // 8 burst, 2/sec sustained
 
 // ---------------------------------------------------------------------------
 // Fetch with retry + rate limit

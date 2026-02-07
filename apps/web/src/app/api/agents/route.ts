@@ -5,6 +5,7 @@ import type { SortField } from "@/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 30; // Allow up to 30s for initial data fetch
 
 const querySchema = z.object({
   q: z.string().max(200).optional().default(""),

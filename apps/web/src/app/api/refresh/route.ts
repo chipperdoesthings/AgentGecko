@@ -4,6 +4,7 @@ import { refreshAgents, forceInvalidate } from "@/lib/agent-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60; // Refresh can take a while due to rate limits
 
 const bodySchema = z
   .object({

@@ -31,9 +31,11 @@ import { getSeedAddresses, findSeedToken } from "./seed-tokens";
 let agentStore: Agent[] = [];
 let lastRefreshAt = 0;
 let refreshInProgress = false;
+let refreshStartedAt = 0;
 
 const MIN_REFRESH_INTERVAL_MS = 30_000; // 30s cooldown between refreshes
 const STALE_THRESHOLD_MS = 3 * 60_000; // 3 min before auto-refresh
+const MAX_REFRESH_DURATION_MS = 25_000; // Auto-reset stuck refresh flag after 25s
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,6 +146,11 @@ export async function refreshAgents(): Promise<{
   errors: string[];
   duration: number;
 }> {
+  // Auto-reset stuck refresh flag
+  if (refreshInProgress && Date.now() - refreshStartedAt > MAX_REFRESH_DURATION_MS) {
+    refreshInProgress = false;
+  }
+
   if (refreshInProgress) {
     return { agents: agentStore, errors: ["Refresh already in progress"], duration: 0 };
   }
@@ -158,29 +165,36 @@ export async function refreshAgents(): Promise<{
   }
 
   refreshInProgress = true;
+  refreshStartedAt = Date.now();
   const start = Date.now();
   const errors: string[] = [];
   const addresses = getSeedAddresses();
   const results: Agent[] = [];
 
   // Process tokens in small batches to respect Nad.fun rate limits
-  const BATCH_SIZE = 3;
+  // Each token needs ~3 API calls (token, market, metrics)
+  const BATCH_SIZE = 2; // 2 tokens = ~6 API calls per batch
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
     const batch = addresses.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.allSettled(
       batch.map(async (addr) => {
-        const [token, market, metrics] = await Promise.all([
-          getTokenInfo(addr),
-          getMarketData(addr),
-          getMetrics(addr, "60,360,1440"),
-        ]);
+        try {
+          const [token, market, metrics] = await Promise.all([
+            getTokenInfo(addr),
+            getMarketData(addr),
+            getMetrics(addr, "60,360,1440"),
+          ]);
 
-        if (!token) {
-          errors.push(`Token info not found: ${addr}`);
+          if (!token) {
+            errors.push(`Token info not found: ${addr.slice(0, 10)}...`);
+            return null;
+          }
+
+          return buildAgent(token, market, metrics);
+        } catch (err) {
+          errors.push(`Error for ${addr.slice(0, 10)}...: ${String(err)}`);
           return null;
         }
-
-        return buildAgent(token, market, metrics);
       }),
     );
 
@@ -194,7 +208,7 @@ export async function refreshAgents(): Promise<{
 
     // Delay between batches to avoid rate limits
     if (i + BATCH_SIZE < addresses.length) {
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 1200));
     }
   }
 
