@@ -1,11 +1,10 @@
 /**
  * Agent Service — the bridge between raw Nad.fun data and our Agent types.
  *
- * Responsibilities:
- *  - Fetch token + market + metrics data in parallel
- *  - Map to our Agent / AgentDetail interfaces
- *  - Score, rank, and categorise agents
- *  - Maintain an in-memory agent list with background refresh
+ * Designed for serverless (Vercel):
+ *  - Fast initial response (returns whatever data we have)
+ *  - Background refresh via non-blocking approach
+ *  - In-memory cache that persists within a warm function instance
  */
 
 import type { Agent, AgentDetail, Category, Trade } from "@/types";
@@ -25,39 +24,30 @@ import { detectAgent } from "./detector";
 import { getSeedAddresses, findSeedToken } from "./seed-tokens";
 
 // ---------------------------------------------------------------------------
-// In-memory agent store (server-side singleton via module scope)
+// In-memory agent store (persists within warm serverless instance)
 // ---------------------------------------------------------------------------
 
 let agentStore: Agent[] = [];
 let lastRefreshAt = 0;
-let refreshInProgress = false;
-let refreshStartedAt = 0;
+let refreshPromise: Promise<void> | null = null;
 
-const MIN_REFRESH_INTERVAL_MS = 30_000; // 30s cooldown between refreshes
-const STALE_THRESHOLD_MS = 3 * 60_000; // 3 min before auto-refresh
-const MAX_REFRESH_DURATION_MS = 25_000; // Auto-reset stuck refresh flag after 25s
+const MIN_REFRESH_INTERVAL_MS = 60_000; // 60s cooldown between refreshes
+const STALE_THRESHOLD_MS = 5 * 60_000; // 5 min before auto-refresh
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseVolume(volume: string, nativePrice: number): number {
-  // Volume is in wei (native). Convert to USD.
+function parseVolume(volume: string, usdPerNative: number): number {
   const wei = parseFloat(volume) || 0;
   const nativeAmount = wei / 1e18;
-  return nativeAmount * nativePrice;
+  return nativeAmount * usdPerNative;
 }
 
 function mapCategory(detected: string, hintCategory?: Category): Category {
   const valid: Category[] = [
-    "meme_trader",
-    "defi",
-    "sniper",
-    "copy_trader",
-    "arbitrage",
-    "social",
-    "analyst",
-    "trading",
+    "meme_trader", "defi", "sniper", "copy_trader",
+    "arbitrage", "social", "analyst", "trading",
   ];
   if (valid.includes(detected as Category)) return detected as Category;
   if (hintCategory && valid.includes(hintCategory)) return hintCategory;
@@ -75,36 +65,27 @@ function buildAgent(
 ): Agent | null {
   const priceUsd = parseFloat(market?.price_usd ?? "0");
   const nativePrice = parseFloat(market?.native_price ?? "0");
-  // Use MON/USD price from the API — native_price is the MON price
-  // We need to estimate the USD value of native
-  // price_usd = token price in USD, native_price = price in native MON
-  // So USD per MON ≈ price_usd / native_price (if both > 0)
   const usdPerNative =
-    nativePrice > 0 && priceUsd > 0 ? priceUsd / nativePrice : 18; // fallback $18/MON
+    nativePrice > 0 && priceUsd > 0 ? priceUsd / nativePrice : 18;
 
   const volumeUsd = parseVolume(market?.volume ?? "0", usdPerNative);
   const holderCount = market?.holder_count ?? 0;
 
-  // Find the best metric for price change (prefer longer timeframes for 24h)
   const metric60 = metrics.find((m) => m.timeframe === "60");
   const metric360 = metrics.find((m) => m.timeframe === "360");
   const metric1440 = metrics.find((m) => m.timeframe === "1440");
   const priceChange = metric1440?.percent ?? metric360?.percent ?? metric60?.percent ?? 0;
 
-  // Count transactions from metrics
   const txCount = metrics.reduce(
-    (sum, m) => sum + (m.transactions?.total ?? 0),
-    0,
+    (sum, m) => sum + (m.transactions?.total ?? 0), 0,
   );
 
-  // Detect agent category
   const seed = findSeedToken(token.token_id);
   const detection = detectAgent(token.name, token.symbol, token.description);
   const category = mapCategory(detection.category, seed?.hintCategory);
 
-  const createdAt = token.created_at * 1000; // API returns unix seconds
+  const createdAt = token.created_at * 1000;
 
-  // Calculate score
   const scoreResult = calculateScore({
     volume24h: volumeUsd,
     holderCount,
@@ -113,7 +94,6 @@ function buildAgent(
     createdAt,
   });
 
-  // Calculate market cap: price_usd * circulating supply
   const totalSupply = parseFloat(market?.total_supply ?? "1000000000000000000000000000") / 1e18;
   const marketCap = priceUsd > 0 ? priceUsd * totalSupply : 0;
 
@@ -125,7 +105,7 @@ function buildAgent(
     imageUri: token.image_uri || "",
     category,
     score: scoreResult.overall,
-    rank: 0, // assigned after sorting
+    rank: 0,
     marketCap,
     price: priceUsd,
     priceChange24h: priceChange,
@@ -138,6 +118,62 @@ function buildAgent(
 }
 
 // ---------------------------------------------------------------------------
+// Fetch a single agent (fast — 3 parallel API calls)
+// ---------------------------------------------------------------------------
+
+async function fetchSingleAgent(addr: string): Promise<Agent | null> {
+  try {
+    const [token, market, metrics] = await Promise.all([
+      getTokenInfo(addr),
+      getMarketData(addr),
+      getMetrics(addr, "60,360"),
+    ]);
+    if (!token) return null;
+    return buildAgent(token, market, metrics);
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Background refresh — populates the store incrementally
+// ---------------------------------------------------------------------------
+
+async function doRefresh(): Promise<{ count: number; errors: string[] }> {
+  const addresses = getSeedAddresses();
+  const errors: string[] = [];
+  const results: Agent[] = [];
+
+  // Fetch tokens one at a time with small delay to avoid rate limits
+  // This is designed to work within serverless timeout constraints
+  for (const addr of addresses) {
+    const agent = await fetchSingleAgent(addr);
+    if (agent) {
+      results.push(agent);
+    } else {
+      errors.push(`Failed: ${addr.slice(0, 10)}...`);
+    }
+    // Small delay between tokens
+    if (results.length + errors.length < addresses.length) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+
+  // Sort and assign ranks
+  results.sort((a, b) => b.score - a.score);
+  results.forEach((agent, idx) => {
+    agent.rank = idx + 1;
+  });
+
+  if (results.length > 0) {
+    agentStore = results;
+    lastRefreshAt = Date.now();
+  }
+
+  return { count: results.length, errors };
+}
+
+// ---------------------------------------------------------------------------
 // Public: Refresh all agents from Nad.fun
 // ---------------------------------------------------------------------------
 
@@ -146,15 +182,6 @@ export async function refreshAgents(): Promise<{
   errors: string[];
   duration: number;
 }> {
-  // Auto-reset stuck refresh flag
-  if (refreshInProgress && Date.now() - refreshStartedAt > MAX_REFRESH_DURATION_MS) {
-    refreshInProgress = false;
-  }
-
-  if (refreshInProgress) {
-    return { agents: agentStore, errors: ["Refresh already in progress"], duration: 0 };
-  }
-
   const now = Date.now();
   if (now - lastRefreshAt < MIN_REFRESH_INTERVAL_MS && agentStore.length > 0) {
     return {
@@ -164,73 +191,30 @@ export async function refreshAgents(): Promise<{
     };
   }
 
-  refreshInProgress = true;
-  refreshStartedAt = Date.now();
-  const start = Date.now();
-  const errors: string[] = [];
-  const addresses = getSeedAddresses();
-  const results: Agent[] = [];
-
-  // Process tokens in small batches to respect Nad.fun rate limits
-  // Each token needs ~3 API calls (token, market, metrics)
-  const BATCH_SIZE = 2; // 2 tokens = ~6 API calls per batch
-  for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
-    const batch = addresses.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.allSettled(
-      batch.map(async (addr) => {
-        try {
-          const [token, market, metrics] = await Promise.all([
-            getTokenInfo(addr),
-            getMarketData(addr),
-            getMetrics(addr, "60,360,1440"),
-          ]);
-
-          if (!token) {
-            errors.push(`Token info not found: ${addr.slice(0, 10)}...`);
-            return null;
-          }
-
-          return buildAgent(token, market, metrics);
-        } catch (err) {
-          errors.push(`Error for ${addr.slice(0, 10)}...: ${String(err)}`);
-          return null;
-        }
-      }),
-    );
-
-    for (const result of batchResults) {
-      if (result.status === "fulfilled" && result.value) {
-        results.push(result.value);
-      } else if (result.status === "rejected") {
-        errors.push(`Fetch failed: ${result.reason}`);
-      }
-    }
-
-    // Delay between batches to avoid rate limits
-    if (i + BATCH_SIZE < addresses.length) {
-      await new Promise((r) => setTimeout(r, 1200));
-    }
+  // If already refreshing, wait for it
+  if (refreshPromise) {
+    await refreshPromise;
+    return { agents: agentStore, errors: [], duration: 0 };
   }
 
-  // Sort by score descending and assign ranks
-  results.sort((a, b) => b.score - a.score);
-  results.forEach((agent, idx) => {
-    agent.rank = idx + 1;
+  const start = Date.now();
+  refreshPromise = doRefresh().then(() => {
+    refreshPromise = null;
+  }).catch(() => {
+    refreshPromise = null;
   });
 
-  agentStore = results;
-  lastRefreshAt = Date.now();
-  refreshInProgress = false;
+  await refreshPromise;
 
   return {
-    agents: results,
-    errors,
+    agents: agentStore,
+    errors: [],
     duration: Date.now() - start,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Public: Get cached agents (returns stale data if available, triggers refresh if stale)
+// Public: Get cached agents (returns stale data if available, triggers refresh)
 // ---------------------------------------------------------------------------
 
 export async function getAgents(): Promise<Agent[]> {
@@ -247,11 +231,10 @@ export async function getAgents(): Promise<Agent[]> {
 export async function getAgentDetail(
   address: string,
 ): Promise<AgentDetail | null> {
-  // Fetch fresh data for the specific token
   const [token, market, metrics, swapHistory] = await Promise.all([
     getTokenInfo(address),
     getMarketData(address),
-    getMetrics(address, "60,360,1440"),
+    getMetrics(address, "60,360"),
     getSwapHistory(address, 20),
   ]);
 
@@ -260,7 +243,6 @@ export async function getAgentDetail(
   const agent = buildAgent(token, market, metrics);
   if (!agent) return null;
 
-  // If we have agents in store, use that rank; otherwise rank 0
   const storeAgent = agentStore.find(
     (a) => a.address.toLowerCase() === address.toLowerCase(),
   );
@@ -268,7 +250,6 @@ export async function getAgentDetail(
     agent.rank = storeAgent.rank;
   }
 
-  // Map swap history to Trade[]
   const trades: Trade[] = (swapHistory.swaps || []).map(
     (swap: Swap, idx: number) => ({
       id: swap.swap_info.transaction_hash || `trade-${idx}`,
@@ -280,7 +261,6 @@ export async function getAgentDetail(
     }),
   );
 
-  // Calculate score breakdown
   const scoreResult = calculateScore({
     volume24h: agent.volume24h,
     holderCount: agent.holderCount,
@@ -289,12 +269,10 @@ export async function getAgentDetail(
     createdAt: agent.createdAt,
   });
 
-  // Determine risk level from score and volatility
   let riskLevel: "low" | "medium" | "high" = "medium";
   if (agent.score >= 70 && agent.holderCount >= 50) riskLevel = "low";
   else if (agent.score < 40 || agent.holderCount < 10) riskLevel = "high";
 
-  // Generate strengths/weaknesses from data
   const strengths: string[] = [];
   const weaknesses: string[] = [];
 
@@ -317,11 +295,13 @@ export async function getAgentDetail(
   else if (agent.txCount24h > 10) strengths.push(`Active trading (${agent.txCount24h} recent transactions)`);
   else weaknesses.push("Low recent transaction activity");
 
-  // Ensure at least one of each
   if (strengths.length === 0) strengths.push("Active on Nad.fun platform");
   if (weaknesses.length === 0) weaknesses.push("Market conditions can change rapidly");
 
-  const summary = `${agent.name} ($${agent.symbol}) is a ${agent.isGraduated ? "graduated" : "bonding curve"} token on Nad.fun with ${agent.holderCount} holders and a market cap of $${agent.marketCap > 1000 ? (agent.marketCap / 1000).toFixed(1) + "K" : agent.marketCap.toFixed(0)}${agent.description ? `. ${agent.description.slice(0, 150)}` : "."}`;
+  const mcapStr = agent.marketCap > 1000
+    ? `$${(agent.marketCap / 1000).toFixed(1)}K`
+    : `$${agent.marketCap.toFixed(0)}`;
+  const summary = `${agent.name} ($${agent.symbol}) is a ${agent.isGraduated ? "graduated" : "bonding curve"} token on Nad.fun with ${agent.holderCount} holders and a market cap of ${mcapStr}${agent.description ? `. ${agent.description.slice(0, 150)}` : "."}`;
 
   return {
     ...agent,

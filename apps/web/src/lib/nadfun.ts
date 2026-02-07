@@ -141,12 +141,13 @@ class TTLCache {
 const cache = new TTLCache();
 
 // Cache TTLs in milliseconds
+// In serverless, these only live within a warm instance
 const CACHE_TTL = {
-  token: 5 * 60_000,   // 5 min — token info rarely changes
-  market: 30_000,       // 30s — prices update frequently
-  metrics: 30_000,      // 30s
-  swaps: 15_000,        // 15s — recent trades
-  chart: 5 * 60_000,    // 5 min
+  token: 10 * 60_000,   // 10 min — token info rarely changes
+  market: 60_000,        // 60s — prices update frequently
+  metrics: 60_000,       // 60s
+  swaps: 30_000,         // 30s — recent trades
+  chart: 5 * 60_000,     // 5 min
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -186,7 +187,7 @@ class RateLimiter {
   }
 }
 
-const limiter = new RateLimiter(8, 2); // 8 burst, 2/sec sustained
+const limiter = new RateLimiter(10, 3); // 10 burst, 3/sec sustained
 
 // ---------------------------------------------------------------------------
 // Fetch with retry + rate limit
