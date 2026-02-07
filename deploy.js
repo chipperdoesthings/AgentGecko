@@ -9,10 +9,10 @@ async function createDeployment() {
   console.log('🦎 Deploying AgentGecko...\n');
   
   const files = [];
-  const outDir = path.join(__dirname, 'out');
+  const outDir = path.join(__dirname, 'apps/web', 'out');
   
   if (!fs.existsSync(outDir)) {
-    console.error('❌ No "out" directory found. Run "next build" first.');
+    console.error('❌ No "out" directory found under apps/web/. Run "npm run build --workspace=@agentgecko/web" first.');
     process.exit(1);
   }
   

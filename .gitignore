@@ -1,4 +1,11 @@
 node_modules/
+apps/*/node_modules/
 .next/
+apps/*/.next/
+out/
+apps/*/out/
 data/
 .env
+.vercel
+pnpm-lock.yaml
+tsconfig.tsbuildinfo
