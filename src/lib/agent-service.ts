@@ -156,8 +156,8 @@ export async function refreshAgents(): Promise<{
   const addresses = getSeedAddresses();
   const results: Agent[] = [];
 
-  // Process tokens in small batches to respect rate limits
-  const BATCH_SIZE = 3;
+  // Process tokens in small batches to respect Nad.fun rate limits (~10 req/min)
+  const BATCH_SIZE = 2;
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
     const batch = addresses.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.allSettled(
@@ -185,9 +185,9 @@ export async function refreshAgents(): Promise<{
       }
     }
 
-    // Small delay between batches
+    // Delay between batches to avoid rate limits
     if (i + BATCH_SIZE < addresses.length) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 2000));
     }
   }
 
