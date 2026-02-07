@@ -147,23 +147,16 @@ async function doRefresh(): Promise<{ count: number; errors: string[] }> {
   const errors: string[] = [];
   const results: Agent[] = [];
 
-  // Fetch tokens with parallel batches of 2 for speed
-  const BATCH = 2;
-  for (let i = 0; i < addresses.length; i += BATCH) {
-    const batch = addresses.slice(i, i + BATCH);
-    const batchResults = await Promise.all(
-      batch.map((addr) => fetchSingleAgent(addr)),
-    );
-    for (let j = 0; j < batchResults.length; j++) {
-      if (batchResults[j]) {
-        results.push(batchResults[j]!);
-      } else {
-        errors.push(`Failed: ${batch[j].slice(0, 10)}...`);
-      }
-    }
-    // Small delay between batches to avoid rate limits
-    if (i + BATCH < addresses.length) {
-      await new Promise((r) => setTimeout(r, 200));
+  // Fetch ALL tokens in parallel for maximum speed
+  // The nadfun.ts rate limiter + cache handles API protection
+  const allResults = await Promise.all(
+    addresses.map((addr) => fetchSingleAgent(addr)),
+  );
+  for (let i = 0; i < allResults.length; i++) {
+    if (allResults[i]) {
+      results.push(allResults[i]!);
+    } else {
+      errors.push(`Failed: ${addresses[i].slice(0, 10)}...`);
     }
   }
 

@@ -187,7 +187,7 @@ class RateLimiter {
   }
 }
 
-const limiter = new RateLimiter(10, 3); // 10 burst, 3/sec sustained
+const limiter = new RateLimiter(20, 5); // 20 burst, 5/sec sustained — Nad.fun can handle this
 
 // ---------------------------------------------------------------------------
 // Fetch with retry + rate limit
@@ -197,7 +197,7 @@ async function apiFetch<T>(
   path: string,
   cacheKey: string,
   ttlMs: number,
-  retries = 2,
+  retries = 1,
 ): Promise<T | null> {
   // Check cache first
   const cached = cache.get<T>(cacheKey);
@@ -210,12 +210,12 @@ async function apiFetch<T>(
       const url = `${API_BASE}${path}`;
       const res = await fetch(url, {
         headers,
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(5_000), // 5s timeout per request
       });
 
       if (res.status === 429) {
-        // Rate limited by server — back off
-        const retryAfter = parseInt(res.headers.get("retry-after") || "5", 10);
+        // Rate limited — short backoff, don't waste serverless time
+        const retryAfter = Math.min(parseInt(res.headers.get("retry-after") || "2", 10), 3);
         console.warn(`[nadfun] 429 rate limited, waiting ${retryAfter}s`);
         await new Promise((r) => setTimeout(r, retryAfter * 1000));
         continue;
@@ -231,10 +231,10 @@ async function apiFetch<T>(
       return data;
     } catch (err) {
       if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 500));
         continue;
       }
-      console.error(`[nadfun] Failed after ${retries + 1} attempts: ${path}`, err);
+      console.error(`[nadfun] Failed: ${path}`, err);
       return null;
     }
   }
