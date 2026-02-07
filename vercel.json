@@ -1,18 +1,6 @@
 {
-  "builds": [
-    {
-      "src": "apps/web/package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
-  ]
+  "buildCommand": "npm run build --workspace=@agentgecko/web",
+  "outputDirectory": "apps/web/.next",
+  "installCommand": "npm install --include=dev",
+  "framework": "nextjs"
 }
