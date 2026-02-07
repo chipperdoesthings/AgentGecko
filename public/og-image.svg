@@ -1,0 +1,61 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#09090b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0f0a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="green" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4ade80;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="glow" cx="30%" cy="40%">
+      <stop offset="0%" style="stop-color:#22c55e;stop-opacity:0.08" />
+      <stop offset="100%" style="stop-color:#22c55e;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  
+  <!-- Border -->
+  <rect x="1" y="1" width="1198" height="628" rx="12" fill="none" stroke="#27272a" stroke-width="2"/>
+  
+  <!-- Gecko emoji placeholder -->
+  <text x="100" y="260" font-size="120" font-family="Apple Color Emoji, Segoe UI Emoji">🦎</text>
+  
+  <!-- Title -->
+  <text x="260" y="220" font-family="system-ui, -apple-system, sans-serif" font-size="64" font-weight="800" fill="url(#green)">AgentGecko</text>
+  
+  <!-- Subtitle -->
+  <text x="260" y="280" font-family="system-ui, -apple-system, sans-serif" font-size="32" fill="#a1a1aa">CoinGecko for AI Agents on Monad</text>
+  
+  <!-- Stats bar -->
+  <rect x="100" y="340" width="1000" height="80" rx="12" fill="#18181b" stroke="#27272a" stroke-width="1"/>
+  
+  <text x="180" y="372" font-family="system-ui, sans-serif" font-size="14" fill="#71717a">AGENTS</text>
+  <text x="180" y="400" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="white">8+</text>
+  
+  <text x="380" y="372" font-family="system-ui, sans-serif" font-size="14" fill="#71717a">24H VOLUME</text>
+  <text x="380" y="400" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="white">$861K</text>
+  
+  <text x="620" y="372" font-family="system-ui, sans-serif" font-size="14" fill="#71717a">TOTAL MCAP</text>
+  <text x="620" y="400" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="white">$1.99M</text>
+  
+  <text x="860" y="372" font-family="system-ui, sans-serif" font-size="14" fill="#71717a">HOLDERS</text>
+  <text x="860" y="400" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="white">6,570</text>
+  
+  <!-- Bottom tags -->
+  <rect x="100" y="460" width="200" height="36" rx="18" fill="#052e16" stroke="#166534" stroke-width="1"/>
+  <text x="135" y="484" font-family="system-ui, sans-serif" font-size="15" fill="#4ade80">🤖 AI-Powered</text>
+  
+  <rect x="320" y="460" width="200" height="36" rx="18" fill="#1e1b4b" stroke="#4338ca" stroke-width="1"/>
+  <text x="355" y="484" font-family="system-ui, sans-serif" font-size="15" fill="#a5b4fc">⚡ On Monad</text>
+  
+  <rect x="540" y="460" width="200" height="36" rx="18" fill="#052e16" stroke="#166534" stroke-width="1"/>
+  <text x="575" y="484" font-family="system-ui, sans-serif" font-size="15" fill="#4ade80">📊 Real-time</text>
+  
+  <!-- Footer -->
+  <text x="100" y="580" font-family="system-ui, sans-serif" font-size="16" fill="#52525b">agentgecko.vercel.app</text>
+  <text x="850" y="580" font-family="system-ui, sans-serif" font-size="14" fill="#3f3f46">Moltiverse Hackathon 2026 • Powered by Opus 4.6</text>
+</svg>

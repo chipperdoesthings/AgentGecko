@@ -7,30 +7,29 @@ import { Button } from "@/components/ui/button";
 import { CATEGORY_META, type Agent } from "@/types";
 import { getScoreColor, getScoreBadge } from "@/lib/scorer";
 import { getCategoryColor } from "@/lib/detector";
+import { formatCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Users, BarChart3 } from "lucide-react";
+import { WatchlistButton } from "./WatchlistButton";
+import { CompareButton } from "./CompareDrawer";
+import { ShareButton } from "./ShareButton";
 
 interface AgentCardProps {
   agent: Agent;
+  showActions?: boolean;
 }
 
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(0)}`;
-}
-
-export function AgentCard({ agent }: AgentCardProps) {
+export function AgentCard({ agent, showActions = true }: AgentCardProps) {
   const meta = CATEGORY_META[agent.category];
   const isPositive = agent.priceChange24h >= 0;
 
   return (
     <Link href={`/agent/${agent.address}`}>
-      <Card className="bg-zinc-900 border-zinc-800 hover:border-green-500/50 transition-all duration-200 cursor-pointer h-full">
+      <Card className="bg-zinc-900 border-zinc-800 hover:border-green-500/50 transition-all duration-200 cursor-pointer h-full group">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-lg">
+              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
                 {meta.icon}
               </div>
               <div>
@@ -38,18 +37,37 @@ export function AgentCard({ agent }: AgentCardProps) {
                 <span className="text-xs text-zinc-500">${agent.symbol}</span>
               </div>
             </div>
-            <div className="text-right">
-              <span className={cn("text-lg font-bold", getScoreColor(agent.score))}>
-                {getScoreBadge(agent.score)} {agent.score}
-              </span>
-              <p className="text-xs text-zinc-500">#{agent.rank}</p>
+            <div className="flex items-center gap-1">
+              {showActions && (
+                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <WatchlistButton address={agent.address} />
+                  <CompareButton agent={agent} />
+                  <ShareButton agent={agent} />
+                </div>
+              )}
+              <div className="text-right pl-1">
+                <span className={cn("text-lg font-bold", getScoreColor(agent.score))}>
+                  {getScoreBadge(agent.score)} {agent.score}
+                </span>
+                <p className="text-xs text-zinc-500">#{agent.rank}</p>
+              </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Badge variant="outline" className={cn("text-xs", getCategoryColor(agent.category))}>
-            {meta.icon} {meta.label}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className={cn("text-xs", getCategoryColor(agent.category))}
+            >
+              {meta.icon} {meta.label}
+            </Badge>
+            {agent.isGraduated && (
+              <Badge className="bg-green-600/20 text-green-400 border-green-500/20 text-xs">
+                🎓
+              </Badge>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>

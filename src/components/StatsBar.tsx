@@ -1,7 +1,8 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { getStats } from "@/lib/agents-seed";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useStats } from "@/hooks/useAgents";
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
@@ -10,7 +11,22 @@ function formatNumber(n: number): string {
 }
 
 export function StatsBar() {
-  const stats = getStats();
+  const { stats, loading } = useStats();
+
+  if (loading || !stats) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="bg-zinc-900 border-zinc-800">
+            <CardContent className="p-4 space-y-2">
+              <Skeleton className="h-4 w-20 bg-zinc-800" />
+              <Skeleton className="h-6 w-16 bg-zinc-800" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   const items = [
     { label: "Total Agents", value: stats.totalAgents.toString(), icon: "🤖" },
