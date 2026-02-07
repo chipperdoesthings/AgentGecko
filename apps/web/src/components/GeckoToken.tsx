@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Coins, Shield, TrendingUp, Zap } from "lucide-react";
 
-const GECKO_BUY_URL = "https://testnet.nad.fun";
+const GECKO_BUY_URL = "https://nad.fun";
 
 export function GeckoBuyButton({ className }: { className?: string }) {
   return (

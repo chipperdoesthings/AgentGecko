@@ -1,8 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { refreshAgents, forceInvalidate } from "@/lib/agent-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const bodySchema = z
+  .object({
+    force: z.boolean().optional().default(false),
+  })
+  .optional()
+  .default({ force: false });
 
 /**
  * POST /api/refresh
@@ -12,14 +20,17 @@ export const revalidate = 0;
  *
  * Returns the refresh result including duration and any errors.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     let force = false;
     try {
       const body = await request.json();
-      force = !!body?.force;
+      const parsed = bodySchema.safeParse(body);
+      if (parsed.success) {
+        force = parsed.data.force;
+      }
     } catch {
-      // no body is fine
+      // no body is fine — use defaults
     }
 
     if (force) {

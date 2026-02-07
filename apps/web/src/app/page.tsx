@@ -28,12 +28,12 @@ export default function HomePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
         {/* Hero */}
         <section className="text-center space-y-6 py-8 sm:py-12 relative">
-          <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 -z-10" aria-hidden="true">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-green-500/5 rounded-full blur-3xl" />
           </div>
 
           <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-4 py-1.5 text-sm text-green-400 mb-2">
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             Moltiverse Hackathon 2026
           </div>
 
@@ -46,9 +46,10 @@ export default function HomePage() {
 
           <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed">
             Discover, rank, and invest in autonomous AI trading agents on{" "}
-            <span className="text-purple-400 font-semibold">Monad</span> via Nad.fun.
-            Powered by{" "}
-            <span className="text-green-400 font-semibold">Opus 4.6</span> agent teams.
+            <span className="text-purple-400 font-semibold">Monad</span> via
+            Nad.fun. Powered by{" "}
+            <span className="text-green-400 font-semibold">Opus 4.6</span>{" "}
+            agent teams.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -73,7 +74,7 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-2 w-2" aria-hidden="true">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
             </span>
@@ -82,15 +83,19 @@ export default function HomePage() {
 
           <div className="flex flex-wrap items-center justify-center gap-6 pt-4 text-sm text-zinc-500">
             <div className="flex items-center gap-1.5">
-              <Zap className="h-4 w-4 text-green-400" />
+              <Zap className="h-4 w-4 text-green-400" aria-hidden="true" />
               <span>Multi-Agent Scoring</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-green-400">📊</span>
+              <span className="text-green-400" aria-hidden="true">
+                📊
+              </span>
               <span>Real-time Rankings</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-green-400">🤖</span>
+              <span className="text-green-400" aria-hidden="true">
+                🤖
+              </span>
               <span>AI-Powered Analysis</span>
             </div>
           </div>
@@ -100,13 +105,16 @@ export default function HomePage() {
           <StatsBar />
         </ErrorBoundary>
 
-        <section className="space-y-4">
+        {/* Top 3 Agents */}
+        <section className="space-y-4" aria-label="Top agents">
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">
             🏆 Top Agents
           </h2>
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => <AgentCardSkeleton key={i} />)}
+              {[1, 2, 3].map((i) => (
+                <AgentCardSkeleton key={i} />
+              ))}
             </div>
           ) : error ? (
             <ErrorCard message={error} onRetry={reload} />
@@ -121,7 +129,8 @@ export default function HomePage() {
 
         <GeckoTokenBanner />
 
-        <section className="space-y-4">
+        {/* All Agents */}
+        <section className="space-y-4" aria-label="All agents">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <h2 className="text-2xl font-bold text-white">All Agents</h2>
             <div className="flex items-center gap-2">
@@ -130,8 +139,11 @@ export default function HomePage() {
                 size="sm"
                 onClick={reload}
                 className="border-zinc-700 text-zinc-400 hover:text-white gap-1.5"
+                aria-label="Refresh data"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+                />
                 <span className="hidden sm:inline">Refresh</span>
               </Button>
               <Button
@@ -143,6 +155,7 @@ export default function HomePage() {
                     ? "bg-green-600 hover:bg-green-700"
                     : "border-zinc-700 text-zinc-400 hover:text-white"
                 }
+                aria-label="Table view"
               >
                 <List className="h-4 w-4" />
               </Button>
@@ -155,6 +168,7 @@ export default function HomePage() {
                     ? "bg-green-600 hover:bg-green-700"
                     : "border-zinc-700 text-zinc-400 hover:text-white"
                 }
+                aria-label="Grid view"
               >
                 <LayoutGrid className="h-4 w-4" />
               </Button>
@@ -172,7 +186,9 @@ export default function HomePage() {
                 <AgentTableSkeleton />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {Array.from({ length: 8 }).map((_, i) => <AgentCardSkeleton key={i} />)}
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <AgentCardSkeleton key={i} />
+                  ))}
                 </div>
               )
             ) : error ? (

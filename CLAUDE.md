@@ -10,128 +10,111 @@ AgentGecko is **CoinGecko for AI trading agents on Monad**. It aggregates, ranks
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    AGENT TEAMS (Opus 4.6)                │
-│                                                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
-│  │ Scout    │  │ Analyst  │  │ Reporter │              │
-│  │ Agent    │  │ Agent    │  │ Agent    │              │
-│  │          │  │          │  │          │              │
-│  │ Discovers│  │ Scores & │  │ Generates│              │
-│  │ new agent│  │ ranks    │  │ insights │              │
-│  │ tokens   │  │ agents   │  │ & alerts │              │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘              │
-│       │              │              │                    │
-│       └──────────────┼──────────────┘                    │
-│                      ▼                                   │
-│              ┌──────────────┐                            │
-│              │ Coordinator  │ ← Orchestrates all agents  │
-│              └──────┬───────┘                            │
-└─────────────────────┼───────────────────────────────────┘
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│                   NEXT.JS APP                            │
+│                   NEXT.JS APP (SSR)                      │
 │                                                          │
 │  Frontend (shadcn/ui)         API Routes                 │
 │  ┌──────────────────┐        ┌────────────────┐         │
 │  │ / Homepage       │        │ /api/agents    │         │
 │  │ /agents Board    │◄──────►│ /api/agent/:id │         │
-│  │ /agent/:addr     │        │ /api/refresh   │         │
+│  │ /agent/:addr     │        │ /api/stats     │         │
+│  │ /watchlist       │        │ /api/refresh   │         │
 │  └──────────────────┘        └───────┬────────┘         │
 │                                      │                   │
 │                              ┌───────▼────────┐         │
 │                              │  Nad.fun API   │         │
-│                              │  (data source) │         │
+│                              │ api.nadapp.net │         │
 │                              └────────────────┘         │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Agent Teams (Opus 4.6 Feature)
+## Data Flow
 
-We use Opus 4.6's agent teams to power the backend intelligence:
-
-### Scout Agent
-- **Job**: Discover new AI agent tokens on Nad.fun
-- **How**: Monitors new token launches, keyword-matches descriptions
-- **Output**: List of candidate agent token addresses
-
-### Analyst Agent  
-- **Job**: Deep-dive analysis on each discovered agent
-- **How**: Fetches market data, metrics, trade history from Nad.fun API
-- **Output**: Scored agent profiles with category classification
-
-### Reporter Agent
-- **Job**: Generate human-readable insights and summaries
-- **How**: Takes scored data, produces market commentary
-- **Output**: Trending alerts, daily summaries, agent comparisons
-
-### Coordinator
-- **Job**: Orchestrates the team, resolves conflicts, merges outputs
-- **Trigger**: Runs on API route `/api/refresh` or cron schedule
+1. **Seed tokens** → Curated list of Nad.fun token addresses (`seed-tokens.ts`)
+2. **Agent service** → Fetches token info, market data, metrics from Nad.fun API
+3. **Scorer** → Calculates AgentGecko Score from 5 weighted factors
+4. **Detector** → Classifies tokens into 8 categories by keyword matching
+5. **API routes** → Serve processed data with Zod-validated params
+6. **Client** → React components fetch from API routes, display with shadcn/ui
 
 ## Tech Stack
 
 | Layer | Tech | Why |
 |-------|------|-----|
-| Framework | Next.js 14 (App Router) | SSR + API routes in one |
+| Framework | Next.js 14 (App Router, SSR) | SSR + API routes in one |
 | UI | shadcn/ui + Tailwind v3 | Clean components, fast dev |
-| Data | Nad.fun REST API (direct) | No DB needed for MVP |
-| Caching | React Query (client) | Auto-refresh, dedup |
-| AI | Claude Opus 4.6 (agent teams) | Multi-agent coordination |
-| Token | $GECKO on Nad.fun | Hackathon requirement |
+| Data | Nad.fun REST API (api.nadapp.net) | No DB needed for MVP |
+| Validation | Zod | API input validation |
 | Deploy | Vercel | Free, instant |
 
-## Project Structure
+## Project Structure (Monorepo)
 
 ```
-agent-gecko/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx              # Homepage: hero + stats + top agents + table
-│   │   ├── layout.tsx            # Nav + footer
-│   │   ├── agents/page.tsx       # Full leaderboard
-│   │   ├── agent/[address]/
-│   │   │   └── page.tsx          # Agent detail: metrics + chart + trades
-│   │   └── api/
-│   │       ├── agents/route.ts   # List/search agents
-│   │       ├── agent/[address]/route.ts  # Single agent detail
-│   │       └── refresh/route.ts  # Trigger agent team refresh
-│   ├── lib/
-│   │   ├── nadfun.ts             # Nad.fun API client
-│   │   ├── detector.ts           # Agent detection (keyword matching)
-│   │   ├── scorer.ts             # Scoring algorithm
-│   │   ├── agents-seed.ts        # Known agent addresses + mock data
-│   │   └── agent-team.ts         # Opus 4.6 agent team orchestrator
-│   ├── components/
-│   │   ├── ui/                   # shadcn components
-│   │   ├── AgentCard.tsx
-│   │   ├── AgentTable.tsx
-│   │   ├── StatsBar.tsx
-│   │   ├── CategoryFilter.tsx
-│   │   └── SearchBar.tsx
-│   └── types/
-│       └── index.ts
-├── CLAUDE.md                     # This file
-├── package.json
-├── tailwind.config.ts
-└── next.config.mjs
+AgentGecko/
+├── apps/
+│   └── web/
+│       ├── src/
+│       │   ├── app/
+│       │   │   ├── page.tsx              # Homepage: hero + stats + top agents + table
+│       │   │   ├── layout.tsx            # Nav + footer + SEO
+│       │   │   ├── globals.css           # Tailwind + custom styles
+│       │   │   ├── agents/page.tsx       # Full leaderboard
+│       │   │   ├── agent/[address]/
+│       │   │   │   └── page.tsx          # Agent detail: metrics + chart + trades
+│       │   │   ├── watchlist/page.tsx    # User's watchlisted agents
+│       │   │   └── api/
+│       │   │       ├── agents/route.ts   # List/search agents (Zod validated)
+│       │   │       ├── agent/[address]/route.ts  # Single agent detail
+│       │   │       ├── stats/route.ts    # Aggregate stats
+│       │   │       └── refresh/route.ts  # Trigger agent data refresh
+│       │   ├── lib/
+│       │   │   ├── nadfun.ts             # Nad.fun API client (TTL cache + rate limiter)
+│       │   │   ├── agent-service.ts      # Agent data orchestration (server singleton)
+│       │   │   ├── detector.ts           # Agent detection (keyword matching)
+│       │   │   ├── scorer.ts             # Scoring algorithm (5-factor weighted)
+│       │   │   ├── seed-tokens.ts        # Curated seed addresses
+│       │   │   ├── api-client.ts         # Client-side fetch helpers
+│       │   │   ├── watchlist.ts          # localStorage watchlist
+│       │   │   ├── format.ts             # Number/date formatting
+│       │   │   └── utils.ts              # cn() + misc
+│       │   ├── components/
+│       │   │   ├── ui/                   # shadcn components
+│       │   │   ├── AgentCard.tsx          # Card view for agents
+│       │   │   ├── AgentTable.tsx         # Table view (sortable)
+│       │   │   ├── AgentDetailClient.tsx  # Agent detail page content
+│       │   │   ├── StatsBar.tsx           # Aggregate stats display
+│       │   │   ├── SearchBar.tsx          # Search input
+│       │   │   ├── CategoryFilter.tsx     # Category pill filters
+│       │   │   ├── CompareDrawer.tsx      # Agent comparison (2-3 agents)
+│       │   │   ├── WatchlistButton.tsx    # Heart toggle button
+│       │   │   ├── ShareButton.tsx        # Share / copy link
+│       │   │   ├── GeckoToken.tsx         # $GECKO branding
+│       │   │   ├── ErrorBoundary.tsx      # Error UI components
+│       │   │   └── Skeletons.tsx          # Loading skeletons
+│       │   ├── hooks/
+│       │   │   ├── useAgents.ts           # Agent data hooks
+│       │   │   └── useWatchlist.ts        # Watchlist state hook
+│       │   └── types/
+│       │       └── index.ts              # TypeScript types
+│       ├── next.config.mjs
+│       ├── tailwind.config.ts
+│       └── package.json
+├── CLAUDE.md                             # This file
+├── FEATURES.md                           # Feature roadmap
+├── vercel.json
+└── package.json                          # Monorepo root
 ```
 
 ## Commands
 
 ```bash
-npm run dev          # Start dev server (localhost:3000)
-npm run build        # Production build
-npm run start        # Start production server
-npm run lint         # ESLint
+# From repo root
+npm run dev                                       # Start dev server (localhost:3000)
+npm run build                                     # Build for production
+npm run build --workspace=@agentgecko/web         # Build (explicit workspace)
+
+# Deploy
+npx vercel deploy --prod --token $TOKEN --yes     # Deploy to Vercel
 ```
-
-## Key Design Decisions
-
-1. **No database** — Fetch from Nad.fun API directly, cache in React Query
-2. **Mock data for demo** — `agents-seed.ts` has realistic mock agents for the demo
-3. **Live data when available** — API routes proxy to Nad.fun for real tokens
-4. **Agent teams for intelligence** — Not just a static dashboard, AI agents actively discover + analyze
-5. **shadcn/ui everywhere** — Consistent, accessible, dark theme
 
 ## Scoring Algorithm
 
@@ -157,9 +140,8 @@ All sub-scores 0-100, log-scaled where appropriate.
 ## Environment Variables
 
 ```
-NEXT_PUBLIC_NAD_API_URL=https://dev-api.nad.fun   # or https://api.nadapp.net for mainnet
+NEXT_PUBLIC_NAD_API_URL=https://api.nadapp.net    # Nad.fun API (mainnet)
 NAD_API_KEY=nadfun_xxx                             # optional, higher rate limits
-ANTHROPIC_API_KEY=sk-ant-xxx                       # for agent team features
 ```
 
 ## Convention
@@ -171,11 +153,12 @@ ANTHROPIC_API_KEY=sk-ant-xxx                       # for agent team features
 - Red (#ef4444) for negative metrics
 - Keep it minimal — no unnecessary animations or complexity
 - Mobile-responsive using Tailwind breakpoints
+- API routes use Zod validation for all inputs
+- Nad.fun API calls go through agent-service.ts (server-side only)
 
 ## What NOT To Do
 
-- Don't add authentication — unnecessary for MVP
+- Don't add authentication — unnecessary for this project
 - Don't build a custom chart library — use lightweight-charts or just numbers
 - Don't over-engineer the backend — direct API calls are fine
 - Don't add wallet connect — just link to Nad.fun for buying
-- Don't use SSR for the main pages — CSR with React Query is simpler

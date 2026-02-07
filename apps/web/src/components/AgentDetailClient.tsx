@@ -152,7 +152,7 @@ export default function AgentDetailClient() {
             <h3 className="text-lg font-semibold text-white">Invest in {agent.name}</h3>
             <p className="text-sm text-zinc-400">Buy ${agent.symbol} on Nad.fun</p>
           </div>
-          <a href={`https://testnet.nad.fun/token/${agent.address}`} target="_blank" rel="noopener noreferrer">
+          <a href={`https://nad.fun/tokens/${agent.address}`} target="_blank" rel="noopener noreferrer">
             <Button className="bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3 text-base shadow-lg shadow-green-500/20">
               Buy on Nad.fun <ExternalLink className="ml-2 h-4 w-4" />
             </Button>

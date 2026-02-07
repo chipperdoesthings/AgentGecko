@@ -17,7 +17,7 @@ export function ShareButton({ agent, className }: ShareButtonProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   const meta = CATEGORY_META[agent.category];
-  const url = `https://agentgecko.vercel.app/agent/${agent.address}`;
+  const url = `https://agentgecko-live.vercel.app/agent/${agent.address}`;
   const text = `${meta.icon} ${agent.name} ($${agent.symbol}) scored ${agent.score}/100 on AgentGecko!\n\n${agent.priceChange24h >= 0 ? "📈" : "📉"} ${agent.priceChange24h >= 0 ? "+" : ""}${agent.priceChange24h.toFixed(1)}% 24h | 💰 $${(agent.marketCap / 1000).toFixed(0)}K mcap\n\nDiscover AI trading agents on Monad 🦎`;
 
   const handleCopy = async () => {

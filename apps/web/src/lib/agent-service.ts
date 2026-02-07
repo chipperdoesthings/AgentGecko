@@ -32,17 +32,18 @@ let agentStore: Agent[] = [];
 let lastRefreshAt = 0;
 let refreshInProgress = false;
 
-const MIN_REFRESH_INTERVAL_MS = 20_000; // 20s cooldown between refreshes
+const MIN_REFRESH_INTERVAL_MS = 30_000; // 30s cooldown between refreshes
+const STALE_THRESHOLD_MS = 3 * 60_000; // 3 min before auto-refresh
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseVolume(volume: string): number {
-  // Volume is in wei (native). Convert to a human-readable number.
-  // 1 MON = 1e18 wei. We approximate USD by multiplying by native_price.
+function parseVolume(volume: string, nativePrice: number): number {
+  // Volume is in wei (native). Convert to USD.
   const wei = parseFloat(volume) || 0;
-  return wei / 1e18;
+  const nativeAmount = wei / 1e18;
+  return nativeAmount * nativePrice;
 }
 
 function mapCategory(detected: string, hintCategory?: Category): Category {
@@ -70,18 +71,25 @@ function buildAgent(
   market: MarketInfo | null,
   metrics: MetricTimeframe[],
 ): Agent | null {
-  const price = parseFloat(market?.price_usd ?? "0");
-  const nativePrice = parseFloat(market?.native_price ?? "0.018");
-  const volume = parseVolume(market?.volume ?? "0");
-  const volumeUsd = volume * nativePrice * 18; // rough USD estimate
+  const priceUsd = parseFloat(market?.price_usd ?? "0");
+  const nativePrice = parseFloat(market?.native_price ?? "0");
+  // Use MON/USD price from the API — native_price is the MON price
+  // We need to estimate the USD value of native
+  // price_usd = token price in USD, native_price = price in native MON
+  // So USD per MON ≈ price_usd / native_price (if both > 0)
+  const usdPerNative =
+    nativePrice > 0 && priceUsd > 0 ? priceUsd / nativePrice : 18; // fallback $18/MON
+
+  const volumeUsd = parseVolume(market?.volume ?? "0", usdPerNative);
   const holderCount = market?.holder_count ?? 0;
 
-  // Find the 60-minute metric for price change
+  // Find the best metric for price change (prefer longer timeframes for 24h)
   const metric60 = metrics.find((m) => m.timeframe === "60");
   const metric360 = metrics.find((m) => m.timeframe === "360");
-  const priceChange = metric360?.percent ?? metric60?.percent ?? 0;
+  const metric1440 = metrics.find((m) => m.timeframe === "1440");
+  const priceChange = metric1440?.percent ?? metric360?.percent ?? metric60?.percent ?? 0;
 
-  // Count 24h transactions from metrics
+  // Count transactions from metrics
   const txCount = metrics.reduce(
     (sum, m) => sum + (m.transactions?.total ?? 0),
     0,
@@ -103,10 +111,9 @@ function buildAgent(
     createdAt,
   });
 
-  const marketCap =
-    price > 0
-      ? price * (parseFloat(market?.total_supply ?? "1000000000000000000000000000") / 1e18)
-      : 0;
+  // Calculate market cap: price_usd * circulating supply
+  const totalSupply = parseFloat(market?.total_supply ?? "1000000000000000000000000000") / 1e18;
+  const marketCap = priceUsd > 0 ? priceUsd * totalSupply : 0;
 
   return {
     address: token.token_id,
@@ -118,7 +125,7 @@ function buildAgent(
     score: scoreResult.overall,
     rank: 0, // assigned after sorting
     marketCap,
-    price,
+    price: priceUsd,
     priceChange24h: priceChange,
     volume24h: volumeUsd,
     holderCount,
@@ -156,8 +163,8 @@ export async function refreshAgents(): Promise<{
   const addresses = getSeedAddresses();
   const results: Agent[] = [];
 
-  // Process tokens in small batches to respect Nad.fun rate limits (~10 req/min)
-  const BATCH_SIZE = 2;
+  // Process tokens in small batches to respect Nad.fun rate limits
+  const BATCH_SIZE = 3;
   for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
     const batch = addresses.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.allSettled(
@@ -165,7 +172,7 @@ export async function refreshAgents(): Promise<{
         const [token, market, metrics] = await Promise.all([
           getTokenInfo(addr),
           getMarketData(addr),
-          getMetrics(addr, "5,15,60"),
+          getMetrics(addr, "60,360,1440"),
         ]);
 
         if (!token) {
@@ -187,7 +194,7 @@ export async function refreshAgents(): Promise<{
 
     // Delay between batches to avoid rate limits
     if (i + BATCH_SIZE < addresses.length) {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
@@ -213,8 +220,7 @@ export async function refreshAgents(): Promise<{
 // ---------------------------------------------------------------------------
 
 export async function getAgents(): Promise<Agent[]> {
-  if (agentStore.length === 0 || Date.now() - lastRefreshAt > 5 * 60_000) {
-    // Auto-refresh if empty or stale (>5 min)
+  if (agentStore.length === 0 || Date.now() - lastRefreshAt > STALE_THRESHOLD_MS) {
     await refreshAgents();
   }
   return agentStore;
@@ -231,7 +237,7 @@ export async function getAgentDetail(
   const [token, market, metrics, swapHistory] = await Promise.all([
     getTokenInfo(address),
     getMarketData(address),
-    getMetrics(address, "5,15,60"),
+    getMetrics(address, "60,360,1440"),
     getSwapHistory(address, 20),
   ]);
 
@@ -269,35 +275,39 @@ export async function getAgentDetail(
     createdAt: agent.createdAt,
   });
 
-  // Determine risk level from score
+  // Determine risk level from score and volatility
   let riskLevel: "low" | "medium" | "high" = "medium";
-  if (agent.score >= 70) riskLevel = "low";
-  else if (agent.score < 40) riskLevel = "high";
+  if (agent.score >= 70 && agent.holderCount >= 50) riskLevel = "low";
+  else if (agent.score < 40 || agent.holderCount < 10) riskLevel = "high";
 
   // Generate strengths/weaknesses from data
   const strengths: string[] = [];
   const weaknesses: string[] = [];
 
   if (agent.holderCount >= 50) strengths.push(`Strong holder base (${agent.holderCount} holders)`);
+  else if (agent.holderCount >= 10) strengths.push(`Growing holder base (${agent.holderCount} holders)`);
   else weaknesses.push(`Limited holders (${agent.holderCount})`);
 
   if (agent.isGraduated) strengths.push("Graduated to DEX — proven liquidity");
   else weaknesses.push("Still on bonding curve — not yet graduated");
 
-  if (agent.volume24h > 1000) strengths.push(`Active trading volume ($${Math.round(agent.volume24h).toLocaleString()})`);
+  if (agent.volume24h > 10000) strengths.push(`High trading volume ($${Math.round(agent.volume24h).toLocaleString()})`);
+  else if (agent.volume24h > 1000) strengths.push(`Active trading volume ($${Math.round(agent.volume24h).toLocaleString()})`);
   else weaknesses.push("Low trading volume");
 
-  if (agent.priceChange24h > 0) strengths.push(`Positive price momentum (+${agent.priceChange24h.toFixed(1)}%)`);
+  if (agent.priceChange24h > 10) strengths.push(`Strong positive momentum (+${agent.priceChange24h.toFixed(1)}%)`);
+  else if (agent.priceChange24h > 0) strengths.push(`Positive price movement (+${agent.priceChange24h.toFixed(1)}%)`);
   else if (agent.priceChange24h < -10) weaknesses.push(`Price declining (${agent.priceChange24h.toFixed(1)}%)`);
 
-  if (agent.txCount24h > 10) strengths.push(`Active trading (${agent.txCount24h} recent transactions)`);
+  if (agent.txCount24h > 50) strengths.push(`High activity (${agent.txCount24h} recent transactions)`);
+  else if (agent.txCount24h > 10) strengths.push(`Active trading (${agent.txCount24h} recent transactions)`);
   else weaknesses.push("Low recent transaction activity");
 
   // Ensure at least one of each
   if (strengths.length === 0) strengths.push("Active on Nad.fun platform");
   if (weaknesses.length === 0) weaknesses.push("Market conditions can change rapidly");
 
-  const summary = `${agent.name} ($${agent.symbol}) is a ${agent.isGraduated ? "graduated" : "bonding curve"} token on Nad.fun${agent.description ? `. ${agent.description.slice(0, 120)}` : ""}`;
+  const summary = `${agent.name} ($${agent.symbol}) is a ${agent.isGraduated ? "graduated" : "bonding curve"} token on Nad.fun with ${agent.holderCount} holders and a market cap of $${agent.marketCap > 1000 ? (agent.marketCap / 1000).toFixed(1) + "K" : agent.marketCap.toFixed(0)}${agent.description ? `. ${agent.description.slice(0, 150)}` : "."}`;
 
   return {
     ...agent,

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getAgentDetail } from "@/lib/agent-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const addressSchema = z
+  .string()
+  .regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address format (expected 0x + 40 hex chars)");
 
 /**
  * GET /api/agent/:address
@@ -16,19 +21,20 @@ export async function GET(
 ) {
   try {
     const { address } = await params;
+    const parsed = addressSchema.safeParse(address);
 
-    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid address format. Expected 0x + 40 hex chars." },
+        { error: parsed.error.issues[0]?.message ?? "Invalid address format" },
         { status: 400 },
       );
     }
 
-    const agent = await getAgentDetail(address);
+    const agent = await getAgentDetail(parsed.data);
 
     if (!agent) {
       return NextResponse.json(
-        { error: "Agent not found", address },
+        { error: "Agent not found", address: parsed.data },
         { status: 404 },
       );
     }

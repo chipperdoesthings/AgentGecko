@@ -8,7 +8,7 @@
  */
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_NAD_API_URL || "https://api.nad.fun";
+  process.env.NEXT_PUBLIC_NAD_API_URL || "https://api.nadapp.net";
 
 const headers: Record<string, string> = {
   Accept: "application/json",
