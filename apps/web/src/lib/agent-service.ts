@@ -140,22 +140,30 @@ async function fetchSingleAgent(addr: string): Promise<Agent | null> {
 // ---------------------------------------------------------------------------
 
 async function doRefresh(): Promise<{ count: number; errors: string[] }> {
-  const addresses = getSeedAddresses();
+  // On cold start (empty store), only fetch primary tier to stay within 10s timeout
+  // On warm instances, fetch all tokens
+  const tier = agentStore.length === 0 ? "primary" : "all";
+  const addresses = getSeedAddresses(tier);
   const errors: string[] = [];
   const results: Agent[] = [];
 
-  // Fetch tokens one at a time with small delay to avoid rate limits
-  // This is designed to work within serverless timeout constraints
-  for (const addr of addresses) {
-    const agent = await fetchSingleAgent(addr);
-    if (agent) {
-      results.push(agent);
-    } else {
-      errors.push(`Failed: ${addr.slice(0, 10)}...`);
+  // Fetch tokens with parallel batches of 2 for speed
+  const BATCH = 2;
+  for (let i = 0; i < addresses.length; i += BATCH) {
+    const batch = addresses.slice(i, i + BATCH);
+    const batchResults = await Promise.all(
+      batch.map((addr) => fetchSingleAgent(addr)),
+    );
+    for (let j = 0; j < batchResults.length; j++) {
+      if (batchResults[j]) {
+        results.push(batchResults[j]!);
+      } else {
+        errors.push(`Failed: ${batch[j].slice(0, 10)}...`);
+      }
     }
-    // Small delay between tokens
-    if (results.length + errors.length < addresses.length) {
-      await new Promise((r) => setTimeout(r, 300));
+    // Small delay between batches to avoid rate limits
+    if (i + BATCH < addresses.length) {
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
 
